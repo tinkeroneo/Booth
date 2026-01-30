@@ -1,0 +1,2 @@
+# Booth
+Foto booth app
