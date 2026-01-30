@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Selfie-Fotokasten v7</title>
+<title>Selfie-Fotokasten v7.2</title>
 <style>
   :root{
     --bg0:#0b0c10; --bg1:#12162a;
@@ -52,7 +52,6 @@
   .controls{ display:grid; gap:10px; margin-top:10px; }
   .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
   .row3{ grid-template-columns: 1.2fr 1fr 1fr; }
-  .row4{ grid-template-columns: 1fr 1fr 1fr 1fr; }
 
   button, select, input[type="text"]{
     width:100%; padding:12px 12px;
@@ -89,7 +88,6 @@
     width:100%; border-radius: 16px; background:#fff;
     border:1px solid rgba(255,255,255,.10);
   }
-  .hint{ font-size:12px; color:var(--muted); line-height:1.35; }
   canvas{ display:none; }
 </style>
 </head>
@@ -97,8 +95,8 @@
 <div class="app">
   <div class="top">
     <div>
-      <div class="title">Selfie-Fotokasten v7</div>
-      <div class="sub">Strip • Grid • Polaroid • Theme optional (Dropdown) • Flipbook (WEBM)</div>
+      <div class="title">Selfie-Fotokasten v7.2</div>
+      <div class="sub">Strip • Grid • Polaroid • Shapes • Theme optional • Flipbook</div>
     </div>
     <button id="flip" title="Kamera wechseln">🔁</button>
   </div>
@@ -118,8 +116,8 @@
     <div class="row row3">
       <select id="layout">
         <option value="strip">Layout: Strip</option>
-        <option value="grid">Layout: Grid (auto)</option>
-        <option value="polaroid">Layout: Polaroid (single)</option>
+        <option value="grid">Layout: Grid</option>
+        <option value="polaroid">Layout: Polaroid</option>
       </select>
 
       <select id="theme">
@@ -149,7 +147,17 @@
         <option value="contrast">Filter: Contrast</option>
       </select>
 
-      <button id="sound">🔊 Sound: an</button>
+      <select id="shape">
+        <option value="rounded">Shape: Rounded</option>
+        <option value="rect">Shape: Rect</option>
+        <option value="circle">Shape: Circle</option>
+        <option value="heart">Shape: Heart</option>
+        <option value="triangle">Shape: Triangle</option>
+        <option value="hex">Shape: Hex</option>
+        <option value="ticket">Shape: Ticket</option>
+        <option value="mix">Shape: Mix</option>
+      </select>
+
       <button id="mirror">🪞 Mirror: an</button>
     </div>
 
@@ -186,31 +194,30 @@
         <span id="gapVal" style="font-size:12px;color:var(--muted);min-width:32px;text-align:right;">16</span>
       </div>
       <div class="pill">
-        <label>FPS Flipbook</label>
+        <label>FPS</label>
         <input id="fps" type="range" min="2" max="12" value="6" />
         <span id="fpsVal" style="font-size:12px;color:var(--muted);min-width:32px;text-align:right;">6</span>
       </div>
     </div>
 
     <div class="row">
-      <input id="caption" type="text" placeholder="Optionaler Text (z.B. 'Te quiero' / 'Sunday mood')" />
+      <input id="caption" type="text" placeholder="Optionaler Text" />
       <button id="dateToggle">📅 Datum: an</button>
     </div>
 
     <div class="row">
       <button id="download">⬇️ Download JPG</button>
-      <button id="flipbook">🎞️ Flipbook (WEBM)</button>
+      <button id="flipbook">🎞️ Flipbook</button>
     </div>
 
     <div class="small">
       <span id="status">Bereit.</span>
-      <span>Theme wirkt nur wenn nicht „aus“</span>
+      <span></span>
     </div>
   </div>
 
   <div class="out">
     <img id="preview" class="preview" alt="" />
-    <div class="hint">GIF geht auch, aber WEBM ist deutlich kleiner/sauberer. (Wenn du willst, bauen wir GIF-Export als Option ein.)</div>
   </div>
 </div>
 
@@ -231,6 +238,7 @@
   const themeSel  = document.getElementById('theme');
   const bgSel     = document.getElementById('bg');
   const filterSel = document.getElementById('filter');
+  const shapeSel  = document.getElementById('shape');
 
   const shotsRange = document.getElementById('shots');
   const shotsVal   = document.getElementById('shotsVal');
@@ -256,12 +264,11 @@
   const btnFlip    = document.getElementById('flip');
   const btnDownload= document.getElementById('download');
   const btnFlipbook= document.getElementById('flipbook');
-  const btnSound   = document.getElementById('sound');
   const btnMirror  = document.getElementById('mirror');
 
   let facing='user', stream=null, lastOut='';
   let lastFrames = [];
-  let soundOn=true, mirrorOn=true, dateOn=true;
+  let mirrorOn=true, dateOn=true;
 
   function setStatus(t){ statusEl.textContent=t; }
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -286,23 +293,6 @@
     btnDate.textContent = dateOn ? '📅 Datum: an' : '📅 Datum: aus';
   };
 
-  function playShutter(){
-    if(!soundOn) return;
-    try{
-      const ac=new (window.AudioContext||window.webkitAudioContext)();
-      const o=ac.createOscillator();
-      const g=ac.createGain();
-      o.type='square';
-      o.frequency.setValueAtTime(880,ac.currentTime);
-      g.gain.setValueAtTime(0.0001,ac.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.22,ac.currentTime+0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.12);
-      o.connect(g).connect(ac.destination);
-      o.start(); o.stop(ac.currentTime+0.13);
-      o.onended=()=>ac.close().catch(()=>{});
-    }catch(e){}
-  }
-
   function updateMirror(){
     const shouldMirror = mirrorOn && facing==='user';
     video.style.transform = shouldMirror ? 'scaleX(-1)' : 'none';
@@ -322,10 +312,6 @@
     setStatus('Bereit.');
   };
 
-  btnSound.onclick=()=>{
-    soundOn=!soundOn;
-    btnSound.textContent = soundOn ? '🔊 Sound: an' : '🔇 Sound: aus';
-  };
   btnMirror.onclick=()=>{
     mirrorOn=!mirrorOn;
     btnMirror.textContent = mirrorOn ? '🪞 Mirror: an' : '🪞 Mirror: aus';
@@ -342,9 +328,9 @@
     if(!lastOut){ setStatus('Kein Ergebnis.'); return; }
     const a=document.createElement('a');
     a.href=lastOut;
-    a.download=`fotokasten_${layoutSel.value}_${themeSel.value}.jpg`;
+    a.download=`fotokasten_${layoutSel.value}_${themeSel.value}_${shapeSel.value}.jpg`;
     document.body.appendChild(a); a.click(); a.remove();
-    setStatus('JPG Download gestartet.');
+    setStatus('Download gestartet.');
   };
 
   function flash(){
@@ -424,7 +410,7 @@
     if(t==='spring') return { base:'#f2fff3', ink:'#102a18', a:'#22c36a', b:'#bff2cc' };
     if(t==='summer') return { base:'#fffdf0', ink:'#1a1f2a', a:'#ffd166', b:'#63d9ff' };
     if(t==='winter') return { base:'#f1f7ff', ink:'#0e2333', a:'#6ac9ff', b:'#c7e7ff' };
-    return { base:'#f7f6f3', ink:'#101010', a:'#444444', b:'#dddddd' }; // sketch/off fallback
+    return { base:'#f7f6f3', ink:'#101010', a:'#444444', b:'#dddddd' };
   }
 
   function drawBackground(w,h){
@@ -457,7 +443,6 @@
       return;
     }
 
-    // pattern
     ctx.save();
     ctx.globalAlpha=0.12+0.30*intensity;
     ctx.strokeStyle='rgba(0,0,0,.40)';
@@ -479,7 +464,6 @@
     roundedRect(10,10,w-20,h-20,28);
     ctx.stroke();
 
-    // inner accent only if theme enabled
     if(s > 0){
       ctx.lineWidth=4;
       ctx.strokeStyle=hexToRgba(a, 0.30 + 0.35*s);
@@ -505,25 +489,6 @@
     ctx.restore();
   }
 
-  function drawShot(im, x,y,w,h, r=18){
-    ctx.save();
-    ctx.shadowColor='rgba(0,0,0,.25)';
-    ctx.shadowBlur=20;
-    ctx.shadowOffsetY=12;
-
-    roundedRect(x,y,w,h,r);
-    ctx.clip();
-    ctx.drawImage(im,x,y,w,h);
-    ctx.restore();
-
-    ctx.save();
-    ctx.strokeStyle='rgba(0,0,0,.10)';
-    ctx.lineWidth=3;
-    roundedRect(x,y,w,h,r);
-    ctx.stroke();
-    ctx.restore();
-  }
-
   function jitterLine(x1,y1,x2,y2, jitter=3.0, segments=18){
     ctx.beginPath();
     for(let i=0;i<=segments;i++){
@@ -534,10 +499,9 @@
     }
     ctx.stroke();
   }
-
   function rand(min,max){ return min + Math.random()*(max-min); }
 
-  // ===== THEME OVERLAY (only if theme != off) =====
+  // ===== Theme overlay =====
   function themeOverlay(w,h){
     if(themeSel.value === 'off') return;
 
@@ -545,7 +509,6 @@
     const s=parseInt(thInt.value,10)/100;
 
     ctx.save();
-    // visible overlay
     ctx.globalAlpha = 0.35 + 0.45*s;
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = hexToRgba(a, 0.10 + 0.25*s);
@@ -568,7 +531,7 @@
     ctx.restore();
   }
 
-  function drawHeart(cx,cy,size){
+  function drawHeartPath(cx,cy,size){
     const s=size;
     ctx.beginPath();
     ctx.moveTo(cx, cy + s*0.30);
@@ -583,7 +546,7 @@
       const y = 90 + i*120;
       const size = 70 + (i%4)*18 + 40*s;
       ctx.fillStyle = hexToRgba(i%2===0?a:b, 0.55);
-      drawHeart(x + rand(-30,30), y + rand(-20,20), size);
+      drawHeartPath(x + rand(-30,30), y + rand(-20,20), size);
       ctx.fill();
     }
     ctx.strokeStyle = hexToRgba(ink, 0.35);
@@ -604,7 +567,6 @@
     ctx.closePath();
     ctx.restore();
   }
-
   function overlayAutumn(w,h,a,b,ink,s){
     for(let i=0;i<10;i++){
       const x = 60 + i*(w-120)/9;
@@ -632,7 +594,6 @@
     }
     ctx.closePath();
   }
-
   function overlaySpring(w,h,a,b,ink,s){
     for(let i=0;i<18;i++){
       const x = 80 + (i%6)*(w-160)/5;
@@ -688,7 +649,6 @@
       jitterLine(bx,by, bx+Math.cos(a-0.7)*s*1.2, by+Math.sin(a-0.7)*s*1.2, 1.6, 4);
     }
   }
-
   function overlayWinter(w,h,a,b,ink,s){
     ctx.strokeStyle = hexToRgba(a, 0.70);
     ctx.lineWidth = 5;
@@ -721,6 +681,105 @@
     }
   }
 
+  // ===== Shapes per photo =====
+  function stableIndexShape(i){
+    const opts = ['rounded','circle','heart','triangle','hex','ticket'];
+    return opts[i % opts.length];
+  }
+
+  function makeClipPath(x,y,w,h, shape, r){
+    const cx = x + w/2, cy = y + h/2;
+    const m = Math.min(w,h);
+
+    ctx.beginPath();
+
+    if(shape === 'rect'){
+      ctx.rect(x,y,w,h);
+      return;
+    }
+    if(shape === 'rounded' || shape === 'ticket'){
+      roundedRect(x,y,w,h,r);
+      return;
+    }
+    if(shape === 'circle'){
+      const rad = (m/2) * 0.98;
+      ctx.arc(cx, cy, rad, 0, Math.PI*2);
+      return;
+    }
+    if(shape === 'triangle'){
+      const pad = m*0.06;
+      const topY = y + pad;
+      const leftX = x + pad;
+      const rightX = x + w - pad;
+      const bottomY = y + h - pad;
+
+      ctx.moveTo(cx, topY);
+      ctx.lineTo(rightX, bottomY);
+      ctx.lineTo(leftX, bottomY);
+      ctx.closePath();
+      return;
+    }
+    if(shape === 'hex'){
+      const rad = (m/2) * 0.98;
+      for(let i=0;i<6;i++){
+        const a = (Math.PI/3)*i - Math.PI/6;
+        const px = cx + Math.cos(a)*rad;
+        const py = cy + Math.sin(a)*rad;
+        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.closePath();
+      return;
+    }
+    if(shape === 'heart'){
+      const size = (m/2) * 1.05;
+      drawHeartPath(cx, cy - size*0.08, size);
+      return;
+    }
+
+    roundedRect(x,y,w,h,r);
+  }
+
+  function punchTicketNotches(x,y,w,h){
+    const m=Math.min(w,h);
+    const notch = m*0.12;
+    const cy = y + h/2;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, cy, notch, -Math.PI/2, Math.PI/2, false);
+    ctx.arc(x+w, cy, notch, Math.PI/2, -Math.PI/2, false);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawShot(im, x,y,w,h, r=18, idx=0){
+    const base = shapeSel.value;
+    const shape = (base === 'mix') ? stableIndexShape(idx) : base;
+
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.25)';
+    ctx.shadowBlur=20;
+    ctx.shadowOffsetY=12;
+
+    makeClipPath(x,y,w,h, shape, r);
+    ctx.clip();
+    ctx.drawImage(im,x,y,w,h);
+
+    if(shape === 'ticket'){
+      punchTicketNotches(x,y,w,h);
+    }
+
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,.10)';
+    ctx.lineWidth=3;
+    makeClipPath(x,y,w,h, shape, r);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   async function loadImages(dataUrls){
     return Promise.all(dataUrls.map(src=>{
       const im=new Image();
@@ -751,10 +810,11 @@
     c.width=w; c.height=h;
     drawBackground(w,h);
 
-    let y=pad;
+    let y=pad, i=0;
     for(const im of ims){
-      drawShot(im, pad, y, iw, ih, 20);
+      drawShot(im, pad, y, iw, ih, 20, i);
       y += ih + gap;
+      i++;
     }
 
     themeOverlay(w,h);
@@ -786,7 +846,7 @@
         if(idx>=n) break;
         const x=pad + cc*(cellW+gap);
         const y=pad + r*(cellH+gap);
-        drawShot(ims[idx], x,y,cellW,cellH,18);
+        drawShot(ims[idx], x,y,cellW,cellH,18, idx);
         idx++;
       }
     }
@@ -817,7 +877,6 @@
 
     const x=pad, y=pad;
 
-    // frame
     ctx.save();
     ctx.shadowColor='rgba(0,0,0,.25)';
     ctx.shadowBlur=24;
@@ -827,19 +886,12 @@
     ctx.fill();
     ctx.restore();
 
-    // photo area
     const px=x+framePad, py=y+framePad;
-    ctx.save();
-    roundedRect(px,py,photoW,photoH,12);
-    ctx.clip();
-    ctx.drawImage(im, px,py,photoW,photoH);
-    ctx.restore();
+    drawShot(im, px,py,photoW,photoH,12, 0);
 
-    // theme overlay over everything (optional)
     themeOverlay(w,h);
     drawOuterBorder(w,h);
 
-    // caption/date in polaroid bottom area
     const cap=(captionEl.value||'').trim();
     const parts=[];
     if(cap) parts.push(cap);
@@ -857,7 +909,7 @@
     return c.toDataURL('image/jpeg',0.95);
   }
 
-  // ===== Flipbook export (canvas -> WEBM) =====
+  // ===== flipbook =====
   async function exportFlipbookWebM(frames){
     if(!frames || frames.length<2) throw new Error('Zu wenige Frames');
 
@@ -899,12 +951,10 @@
     const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
     const url = URL.createObjectURL(blob);
 
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `flipbook_${themeSel.value}_${fps}fps.webm`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=`flipbook_${themeSel.value}_${shapeSel.value}_${fps}fps.webm`;
+    document.body.appendChild(a); a.click(); a.remove();
 
     setTimeout(()=>URL.revokeObjectURL(url), 1500);
     return blob.size;
@@ -915,19 +965,19 @@
     const n=parseInt(shotsRange.value,10);
     const t=parseInt(timerRange.value,10);
 
-    setStatus(`Serie läuft: ${n} Fotos…`);
+    setStatus(`Serie läuft…`);
     btnStart.disabled=true;
 
     const frames=[];
     for(let i=0;i<n;i++){
       if(t>0) await countdown(t);
-      flash(); playShutter();
+      flash();
       frames.push(captureFrame());
       await sleep(250);
     }
 
     btnStart.disabled=false;
-    setStatus('Render…');
+    setStatus(`Render…`);
 
     lastFrames = frames.slice();
 
@@ -938,35 +988,34 @@
 
     lastOut=out;
     preview.src=out;
-    setStatus('Fertig.');
+    setStatus(`Fertig.`);
   }
 
   btnStart.onclick=()=>takeSeries().catch(e=>{
     console.error(e);
-    setStatus('Kamera nicht bereit / keine Berechtigung.');
+    setStatus('Kamera nicht bereit.');
     btnStart.disabled=false;
   });
 
   btnFlipbook.onclick=async()=>{
     try{
       if(!lastFrames.length) { setStatus('Erst eine Serie aufnehmen.'); return; }
-      setStatus('Flipbook rendern…');
+      setStatus('Flipbook…');
       const size = await exportFlipbookWebM(lastFrames);
-      setStatus(`Flipbook fertig (${Math.round(size/1024)} KB).`);
+      setStatus(`Fertig (${Math.round(size/1024)} KB).`);
     }catch(e){
       console.error(e);
-      setStatus('Flipbook Export fehlgeschlagen (Browser?).');
+      setStatus('Flipbook fehlgeschlagen.');
     }
   };
 
-  // init
   (async()=>{
     try{
       await startCam();
       setStatus('Bereit.');
     }catch(e){
       console.error(e);
-      setStatus('Kamera blockiert. Bitte Berechtigung erlauben.');
+      setStatus('Kamera blockiert.');
     }
   })();
 
