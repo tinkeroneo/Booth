@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Selfie-Fotokasten v4</title>
+<style>
+  :root{
+    --bg0:#0b0c10; --bg1:#12162a;
+    --card: rgba(18,22,42,.72);
+    --fg:#e9edf1; --muted:#b9c0cc;
+    --btn:#1c2033; --btn2:#262b45;
+    --accent:#ffd166;
+    --shadow: 0 30px 90px rgba(0,0,0,.55);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; display:grid; place-items:center;
+    font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    color:var(--fg);
+    background: radial-gradient(1100px 700px at 50% -10%, var(--bg1), var(--bg0));
+  }
+  .app{
+    width:min(94vw, 560px);
+    background: var(--card);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 22px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+  }
+  .top{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+  .title{ font-weight:850; letter-spacing:.2px; }
+  .sub{ font-size:12px; color:var(--muted); }
+  .stage{
+    position:relative; border-radius:16px; overflow:hidden; background:#000;
+    border:1px solid rgba(255,255,255,.08);
+  }
+  video{
+    width:100%; aspect-ratio: 3/4; object-fit:cover; display:block;
+    transform: scaleX(-1);
+  }
+  .overlay{ position:absolute; inset:0; display:grid; place-items:center; pointer-events:none; }
+  .count{
+    font-size:92px; font-weight:900; color:var(--accent);
+    text-shadow: 0 12px 34px rgba(0,0,0,.85);
+  }
+  .flash{ position:absolute; inset:0; background:#fff; opacity:0; transition: opacity .12s ease; }
+  .flash.on{ opacity:.85; }
+
+  .controls{ display:grid; gap:10px; margin-top:10px; }
+  .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  .row3{ grid-template-columns: 1.15fr 1fr 1fr; }
+
+  button, select, input[type="text"]{
+    width:100%; padding:12px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.10);
+    background: var(--btn);
+    color: var(--fg);
+    font-weight: 650;
+    outline: none;
+  }
+  button.primary{ background: var(--accent); color:#1b1400; border-color: transparent; }
+  button:active{ transform: translateY(1px); }
+
+  .pill{
+    display:flex; align-items:center; gap:10px;
+    background: var(--btn2);
+    border:1px solid rgba(255,255,255,.08);
+    padding: 10px 12px; border-radius:14px;
+  }
+  .pill label{ font-size:12px; color:var(--muted); min-width:78px; }
+  .pill input[type="range"]{ width:100%; }
+
+  .small{
+    font-size:12px; color:var(--muted);
+    display:flex; justify-content:space-between; gap:8px; padding:0 2px;
+  }
+
+  .out{ margin-top:12px; display:grid; gap:10px; }
+  .preview{
+    width:100%; border-radius: 16px; background:#fff;
+    border:1px solid rgba(255,255,255,.10);
+  }
+  .hint{ font-size:12px; color:var(--muted); line-height:1.35; }
+
+  canvas{ display:none; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div>
+      <div class="title">Selfie-Fotokasten v4</div>
+      <div class="sub">Strip • Adaptive Grid • Polaroid • Themes (Deko)</div>
+    </div>
+    <button id="flip" title="Kamera wechseln">🔁</button>
+  </div>
+
+  <div class="stage">
+    <video id="video" playsinline autoplay muted></video>
+    <div class="overlay"><div id="count" class="count"></div></div>
+    <div id="flash" class="flash"></div>
+  </div>
+
+  <div class="controls">
+    <div class="row">
+      <button id="start" class="primary">📸 Start</button>
+      <button id="redo">♻️ Neu</button>
+    </div>
+
+    <div class="row row3">
+      <select id="layout">
+        <option value="strip">Layout: Strip (klassisch)</option>
+        <option value="grid">Layout: Grid (auto)</option>
+        <option value="polaroid">Layout: Polaroid Stack</option>
+      </select>
+
+      <select id="theme">
+        <option value="clean">Theme: Clean</option>
+        <option value="scrapbook">Theme: Scrapbook (Tape)</option>
+        <option value="night">Theme: Night (Stars)</option>
+        <option value="neon">Theme: Neon</option>
+      </select>
+
+      <select id="bg">
+        <option value="paper">BG: Paper</option>
+        <option value="solid">BG: Solid</option>
+        <option value="gradient">BG: Gradient</option>
+        <option value="pattern">BG: Pattern</option>
+      </select>
+    </div>
+
+    <div class="row row3">
+      <select id="filter">
+        <option value="none">Filter: Normal</option>
+        <option value="bw">Filter: B&W</option>
+        <option value="vintage">Filter: Vintage</option>
+        <option value="warm">Filter: Warm</option>
+        <option value="contrast">Filter: Contrast</option>
+      </select>
+
+      <button id="sound">🔊 Sound: an</button>
+      <button id="mirror">🪞 Mirror: an</button>
+    </div>
+
+    <div class="row">
+      <div class="pill">
+        <label>Fotos</label>
+        <input id="shots" type="range" min="2" max="12" value="4" />
+        <span id="shotsVal" style="font-size:12px;color:var(--muted);min-width:26px;text-align:right;">4</span>
+      </div>
+      <div class="pill">
+        <label>Countdown</label>
+        <input id="timer" type="range" min="0" max="8" value="3" />
+        <span id="timerVal" style="font-size:12px;color:var(--muted);min-width:26px;text-align:right;">3</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="pill">
+        <label>BG Stärke</label>
+        <input id="bgInt" type="range" min="0" max="100" value="65" />
+        <span id="bgIntVal" style="font-size:12px;color:var(--muted);min-width:32px;text-align:right;">65</span>
+      </div>
+      <div class="pill">
+        <label>Rand/Gap</label>
+        <input id="gap" type="range" min="6" max="32" value="16" />
+        <span id="gapVal" style="font-size:12px;color:var(--muted);min-width:32px;text-align:right;">16</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <input id="caption" type="text" placeholder="Optionaler Text (z.B. 'Rooftop vibes')" />
+      <button id="dateToggle">📅 Datum: an</button>
+    </div>
+
+    <div class="row">
+      <button id="download">⬇️ Download</button>
+      <button id="accent">🎨 Akzent: wechseln</button>
+    </div>
+
+    <div class="small">
+      <span id="status">Bereit.</span>
+      <span>Polaroid: 1–6 Fotos sieht am besten</span>
+    </div>
+  </div>
+
+  <div class="out">
+    <img id="preview" class="preview" alt="" />
+    <div class="hint">Ergebnis hier. Lange drücken → speichern, oder „Download“.</div>
+  </div>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+(() => {
+  const video = document.getElementById('video');
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+
+  const countEl = document.getElementById('count');
+  const flashEl = document.getElementById('flash');
+  const preview = document.getElementById('preview');
+  const statusEl = document.getElementById('status');
+
+  const layoutSel = document.getElementById('layout');
+  const themeSel  = document.getElementById('theme');
+  const bgSel     = document.getElementById('bg');
+  const filterSel = document.getElementById('filter');
+
+  const shotsRange = document.getElementById('shots');
+  const shotsVal   = document.getElementById('shotsVal');
+  const timerRange = document.getElementById('timer');
+  const timerVal   = document.getElementById('timerVal');
+
+  const bgInt      = document.getElementById('bgInt');
+  const bgIntVal   = document.getElementById('bgIntVal');
+  const gapRange   = document.getElementById('gap');
+  const gapVal     = document.getElementById('gapVal');
+
+  const captionEl  = document.getElementById('caption');
+  const btnDate    = document.getElementById('dateToggle');
+
+  const btnStart   = document.getElementById('start');
+  const btnRedo    = document.getElementById('redo');
+  const btnFlip    = document.getElementById('flip');
+  const btnDownload= document.getElementById('download');
+  const btnSound   = document.getElementById('sound');
+  const btnMirror  = document.getElementById('mirror');
+  const btnAccent  = document.getElementById('accent');
+
+  let facing='user', stream=null, lastOut='';
+  let soundOn=true, mirrorOn=true, dateOn=true;
+
+  const accents = ['#ffd166','#7bdff2','#ff6b6b','#a1ff0a','#c7a4ff','#ffa7c4'];
+  let accentIdx=0;
+
+  function setStatus(t){ statusEl.textContent=t; }
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+  shotsRange.oninput=()=>shotsVal.textContent=shotsRange.value;
+  timerRange.oninput=()=>timerVal.textContent=timerRange.value;
+  bgInt.oninput=()=>bgIntVal.textContent=bgInt.value;
+  gapRange.oninput=()=>gapVal.textContent=gapRange.value;
+
+  function setAccent(hex){
+    document.documentElement.style.setProperty('--accent', hex);
+  }
+  setAccent(accents[accentIdx]);
+  btnAccent.onclick=()=>{ accentIdx=(accentIdx+1)%accents.length; setAccent(accents[accentIdx]); };
+
+  btnDate.onclick=()=>{
+    dateOn=!dateOn;
+    btnDate.textContent = dateOn ? '📅 Datum: an' : '📅 Datum: aus';
+  };
+
+  function playShutter(){
+    if(!soundOn) return;
+    try{
+      const ac=new (window.AudioContext||window.webkitAudioContext)();
+      const o=ac.createOscillator();
+      const g=ac.createGain();
+      o.type='square';
+      o.frequency.setValueAtTime(880,ac.currentTime);
+      g.gain.setValueAtTime(0.0001,ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.22,ac.currentTime+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+0.12);
+      o.connect(g).connect(ac.destination);
+      o.start(); o.stop(ac.currentTime+0.13);
+      o.onended=()=>ac.close().catch(()=>{});
+    }catch(e){}
+  }
+
+  function updateMirror(){
+    const shouldMirror = mirrorOn && facing==='user';
+    video.style.transform = shouldMirror ? 'scaleX(-1)' : 'none';
+  }
+
+  async function startCam(){
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ video:{facingMode:facing}, audio:false });
+    video.srcObject=stream;
+    updateMirror();
+  }
+
+  btnFlip.onclick=async()=>{
+    facing = (facing==='user') ? 'environment' : 'user';
+    setStatus('Kamera wechseln…');
+    await startCam();
+    setStatus('Bereit.');
+  };
+
+  btnSound.onclick=()=>{
+    soundOn=!soundOn;
+    btnSound.textContent = soundOn ? '🔊 Sound: an' : '🔇 Sound: aus';
+  };
+  btnMirror.onclick=()=>{
+    mirrorOn=!mirrorOn;
+    btnMirror.textContent = mirrorOn ? '🪞 Mirror: an' : '🪞 Mirror: aus';
+    updateMirror();
+  };
+
+  btnRedo.onclick=()=>{
+    lastOut=''; preview.removeAttribute('src'); setStatus('Bereit.');
+  };
+
+  btnDownload.onclick=()=>{
+    if(!lastOut){ setStatus('Kein Ergebnis zum Download.'); return; }
+    const a=document.createElement('a');
+    a.href=lastOut;
+    a.download=`fotokasten_${layoutSel.value}_${themeSel.value}_${bgSel.value}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setStatus('Download gestartet.');
+  };
+
+  function flash(){
+    flashEl.classList.add('on');
+    setTimeout(()=>flashEl.classList.remove('on'),120);
+  }
+
+  async function countdown(sec){
+    for(let i=sec;i>0;i--){
+      countEl.textContent=i;
+      await sleep(700);
+    }
+    countEl.textContent='';
+  }
+
+  function applyFilter(){
+    switch(filterSel.value){
+      case 'bw': ctx.filter='grayscale(100%) contrast(1.08)'; break;
+      case 'vintage': ctx.filter='sepia(0.55) contrast(1.10) saturate(1.15)'; break;
+      case 'warm': ctx.filter='sepia(0.25) saturate(1.35) contrast(1.05)'; break;
+      case 'contrast': ctx.filter='contrast(1.25) saturate(1.1)'; break;
+      default: ctx.filter='none';
+    }
+  }
+
+  function captureFrame(){
+    const vw=video.videoWidth, vh=video.videoHeight;
+    if(!vw||!vh) throw new Error('Video nicht bereit');
+
+    const targetAR=3/4;
+    const srcAR=vw/vh;
+
+    let sx=0, sy=0, sw=vw, sh=vh;
+    if(srcAR>targetAR){
+      sh=vh; sw=Math.round(vh*targetAR); sx=Math.round((vw-sw)/2);
+    }else{
+      sw=vw; sh=Math.round(vw/targetAR); sy=Math.round((vh-sh)/2);
+    }
+
+    const outW=900, outH=Math.round(outW/targetAR);
+    c.width=outW; c.height=outH;
+
+    ctx.save();
+    const shouldMirror = mirrorOn && facing==='user';
+    if(shouldMirror){ ctx.translate(outW,0); ctx.scale(-1,1); }
+    applyFilter();
+    ctx.drawImage(video, sx, sy, sw, sh, 0,0,outW,outH);
+    ctx.restore();
+    ctx.filter='none';
+
+    return c.toDataURL('image/jpeg',0.95);
+  }
+
+  async function takeSeries(){
+    const n=parseInt(shotsRange.value,10);
+    const t=parseInt(timerRange.value,10);
+
+    setStatus(`Serie läuft: ${n} Fotos…`);
+    btnStart.disabled=true;
+
+    const shots=[];
+    for(let i=0;i<n;i++){
+      if(t>0) await countdown(t);
+      flash(); playShutter();
+      shots.push(captureFrame());
+      await sleep(250);
+    }
+
+    btnStart.disabled=false;
+    setStatus('Layout bauen…');
+
+    let out;
+    if(layoutSel.value==='strip') out = await buildStrip(shots);
+    else if(layoutSel.value==='polaroid') out = await buildPolaroid(shots);
+    else out = await buildGrid(shots);
+
+    lastOut=out;
+    preview.src=out;
+    setStatus('Fertig.');
+  }
+
+  btnStart.onclick=()=>takeSeries().catch(e=>{
+    console.error(e);
+    setStatus('Kamera nicht bereit / keine Berechtigung.');
+    btnStart.disabled=false;
+  });
+
+  function roundedRect(x,y,w,h,r){
+    const rr=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function drawBackground(w,h){
+    const intensity=parseInt(bgInt.value,10)/100; // 0..1
+    const mode=bgSel.value;
+
+    ctx.fillStyle='#fff';
+    ctx.fillRect(0,0,w,h);
+
+    if(mode==='solid'){
+      ctx.fillStyle=`rgba(248,246,240,${0.92+0.08*intensity})`;
+      ctx.fillRect(0,0,w,h);
+      return;
+    }
+
+    if(mode==='paper'){
+      ctx.fillStyle='#f8f6f0';
+      ctx.fillRect(0,0,w,h);
+      const g=ctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'#ffffff');
+      g.addColorStop(1,'#f1ede2');
+      ctx.globalAlpha=0.45+0.45*intensity;
+      ctx.fillStyle=g;
+      ctx.fillRect(0,0,w,h);
+      ctx.globalAlpha=1;
+      return;
+    }
+
+    if(mode==='gradient'){
+      ctx.fillStyle='#f8f6f0';
+      ctx.fillRect(0,0,w,h);
+      const g=ctx.createRadialGradient(w*0.35,h*0.25,50, w*0.5,h*0.5, Math.max(w,h));
+      const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ffd166';
+      ctx.fillStyle=g;
+      g.addColorStop(0, hexToRgba(accent, 0.12*intensity));
+      g.addColorStop(1, 'rgba(18,22,42,'+(0.10*intensity)+')');
+      ctx.fillRect(0,0,w,h);
+      return;
+    }
+
+    // pattern
+    ctx.fillStyle='#f8f6f0';
+    ctx.fillRect(0,0,w,h);
+
+    ctx.save();
+    ctx.globalAlpha=0.10+0.22*intensity;
+    ctx.strokeStyle='#000';
+    ctx.lineWidth=1;
+    const step=36;
+    for(let x=-h;x<w;x+=step){
+      ctx.beginPath();
+      ctx.moveTo(x,0);
+      ctx.lineTo(x+h,h);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=0.06+0.18*intensity;
+    ctx.fillStyle='#000';
+    for(let y=20;y<h;y+=48){
+      for(let x=20;x<w;x+=48){
+        ctx.beginPath();
+        ctx.arc(x,y,1.3,0,Math.PI*2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawOuterBorder(w,h){
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,.08)';
+    ctx.lineWidth=6;
+    roundedRect(10,10,w-20,h-20,28);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawStamp(w,h, extra=''){
+    const cap = (captionEl.value||'').trim();
+    const parts=[];
+    if(cap) parts.push(cap);
+    if(dateOn) parts.push(new Date().toLocaleString('de-DE'));
+    if(extra) parts.push(extra);
+
+    if(!parts.length) return;
+
+    ctx.save();
+    ctx.fillStyle='rgba(17,17,17,.70)';
+    ctx.font='700 30px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.textAlign='center';
+    ctx.fillText(parts.join(' • '), w/2, h-28);
+    ctx.restore();
+  }
+
+  function drawThemeDecor(w,h){
+    const t = themeSel.value;
+    const intensity=parseInt(bgInt.value,10)/100;
+
+    if(t==='clean'){
+      // minimal corner marks
+      ctx.save();
+      ctx.strokeStyle='rgba(0,0,0,'+(0.10+0.12*intensity)+')';
+      ctx.lineWidth=4;
+      const m=26, l=30;
+      // TL
+      ctx.beginPath(); ctx.moveTo(m, m+l); ctx.lineTo(m,m); ctx.lineTo(m+l,m); ctx.stroke();
+      // TR
+      ctx.beginPath(); ctx.moveTo(w-m-l, m); ctx.lineTo(w-m,m); ctx.lineTo(w-m,m+l); ctx.stroke();
+      // BL
+      ctx.beginPath(); ctx.moveTo(m, h-m-l-70); ctx.lineTo(m,h-m-70); ctx.lineTo(m+l,h-m-70); ctx.stroke();
+      // BR
+      ctx.beginPath(); ctx.moveTo(w-m-l, h-m-70); ctx.lineTo(w-m,h-m-70); ctx.lineTo(w-m,h-m-l-70); ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    if(t==='scrapbook'){
+      // tape corners
+      ctx.save();
+      ctx.globalAlpha=0.55+0.30*intensity;
+      ctx.fillStyle='rgba(255, 236, 170, .85)';
+      const tapeW=140, tapeH=46;
+      const rot = (deg)=>deg*Math.PI/180;
+
+      function tape(x,y,angle){
+        ctx.save();
+        ctx.translate(x,y);
+        ctx.rotate(angle);
+        ctx.fillRect(-tapeW/2,-tapeH/2,tapeW,tapeH);
+        ctx.restore();
+      }
+      tape(70,70,rot(-18));
+      tape(w-70,80,rot(12));
+      tape(80,h-110,rot(10));
+      tape(w-90,h-120,rot(-14));
+      ctx.restore();
+      return;
+    }
+
+    if(t==='night'){
+      // stars/dots
+      ctx.save();
+      ctx.globalAlpha=0.10+0.25*intensity;
+      ctx.fillStyle='#000';
+      for(let i=0;i<220;i++){
+        const x = Math.random()*w;
+        const y = Math.random()*(h-80);
+        const r = Math.random()*1.8;
+        ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+      }
+      ctx.globalAlpha=0.10+0.10*intensity;
+      const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ffd166';
+      ctx.fillStyle=accent;
+      for(let i=0;i<26;i++){
+        const x = Math.random()*w;
+        const y = Math.random()*(h-120);
+        ctx.beginPath(); ctx.arc(x,y,2.2,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
+
+    if(t==='neon'){
+      // neon frame glow
+      ctx.save();
+      const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ffd166';
+      ctx.shadowColor = hexToRgba(accent, 0.55);
+      ctx.shadowBlur = 40 + 60*intensity;
+      ctx.strokeStyle = hexToRgba(accent, 0.55);
+      ctx.lineWidth = 10;
+      roundedRect(22,22,w-44,h-44,34);
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+  }
+
+  function hexToRgba(hex, a){
+    const h = hex.replace('#','').trim();
+    if(h.length!==6) return `rgba(255,209,102,${a})`;
+    const r=parseInt(h.slice(0,2),16);
+    const g=parseInt(h.slice(2,4),16);
+    const b=parseInt(h.slice(4,6),16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  async function loadImages(dataUrls){
+    return Promise.all(dataUrls.map(src=>{
+      const im=new Image();
+      im.src=src;
+      return im.decode().then(()=>im);
+    }));
+  }
+
+  function computeGrid(n){
+    let cols = Math.ceil(Math.sqrt(n));
+    let rows = Math.ceil(n/cols);
+    if(rows>cols){ cols+=1; rows=Math.ceil(n/cols); }
+    return {cols,rows};
+  }
+
+  function drawShot(im, x,y,w,h, radius=18){
+    // shadow + rounded clip + stroke
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.22)';
+    ctx.shadowBlur=18;
+    ctx.shadowOffsetY=10;
+
+    roundedRect(x,y,w,h,radius);
+    ctx.clip();
+    ctx.drawImage(im,x,y,w,h);
+    ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle='rgba(0,0,0,.10)';
+    ctx.lineWidth=3;
+    roundedRect(x,y,w,h,radius);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Layouts
+  async function buildStrip(dataUrls){
+    const ims = await loadImages(dataUrls);
+    const gap = parseInt(gapRange.value,10);
+    const pad = 36;
+    const labelH = (captionEl.value.trim() || dateOn) ? 70 : 24;
+
+    const iw = 820;
+    const ih = Math.round(iw / (3/4)); // 3:4
+
+    const w = pad*2 + iw;
+    const h = pad*2 + ims.length*ih + (ims.length-1)*gap + labelH;
+
+    c.width=w; c.height=h;
+    drawBackground(w,h);
+    drawThemeDecor(w,h);
+
+    let y=pad;
+    for(const im of ims){
+      drawShot(im, pad, y, iw, ih, 20);
+      y += ih + gap;
+    }
+
+    drawOuterBorder(w,h);
+    drawStamp(w,h, `Strip • ${ims.length} fotos`);
+    return c.toDataURL('image/jpeg',0.95);
+  }
+
+  async function buildGrid(dataUrls){
+    const ims=await loadImages(dataUrls);
+    const n=ims.length;
+    const {cols,rows}=computeGrid(n);
+
+    const gap=parseInt(gapRange.value,10);
+    const pad=36;
+    const labelH = (captionEl.value.trim() || dateOn) ? 70 : 24;
+
+    const cellW = (cols<=2)? 860 : (cols===3? 620 : 500);
+    const cellH = Math.round(cellW/(3/4));
+
+    const w = pad*2 + cols*cellW + (cols-1)*gap;
+    const h = pad*2 + rows*cellH + (rows-1)*gap + labelH;
+
+    c.width=w; c.height=h;
+    drawBackground(w,h);
+    drawThemeDecor(w,h);
+
+    let idx=0;
+    for(let r=0;r<rows;r++){
+      for(let cc=0;cc<cols;cc++){
+        if(idx>=n) break;
+        const x=pad + cc*(cellW+gap);
+        const y=pad + r*(cellH+gap);
+        drawShot(ims[idx], x,y,cellW,cellH,18);
+        idx++;
+      }
+    }
+
+    drawOuterBorder(w,h);
+    drawStamp(w,h, `Grid ${cols}×${rows}`);
+    return c.toDataURL('image/jpeg',0.95);
+  }
+
+  async function buildPolaroid(dataUrls){
+    // Stack mit Polaroid-Rahmen (max 6 sinnvoll)
+    const ims=await loadImages(dataUrls.slice(0,6));
+    const n=ims.length;
+    const gap=16;
+    const pad=44;
+    const labelH = (captionEl.value.trim() || dateOn) ? 70 : 24;
+
+    const photoW=760;
+    const photoH=Math.round(photoW/(3/4));
+
+    // Polaroid Frame: unten extra Platz
+    const framePad=26;
+    const bottomExtra=84;
+
+    const stackSpread = 34; // Verschiebung pro Karte
+    const w = pad*2 + photoW + framePad*2 + stackSpread*(n-1);
+    const h = pad*2 + photoH + framePad*2 + bottomExtra + stackSpread*(n-1) + labelH;
+
+    c.width=w; c.height=h;
+    drawBackground(w,h);
+    drawThemeDecor(w,h);
+
+    // draw from back to front
+    const centerX = pad + framePad;
+    const centerY = pad + framePad;
+
+    const accent=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ffd166';
+
+    for(let i=n-1;i>=0;i--){
+      const x = centerX + stackSpread*i;
+      const y = centerY + stackSpread*i;
+
+      const angle = (i - (n-1)/2) * 0.06; // leicht drehen
+      ctx.save();
+      ctx.translate(x + photoW/2, y + (photoH+bottomExtra)/2);
+      ctx.rotate(angle);
+      ctx.translate(-(x + photoW/2), -(y + (photoH+bottomExtra)/2));
+
+      // frame
+      ctx.save();
+      ctx.shadowColor='rgba(0,0,0,.25)';
+      ctx.shadowBlur=22;
+      ctx.shadowOffsetY=12;
+
+      ctx.fillStyle='#fff';
+      roundedRect(x, y, photoW + framePad*2, photoH + framePad*2 + bottomExtra, 18);
+      ctx.fill();
+      ctx.restore();
+
+      // photo area clip
+      const px = x + framePad;
+      const py = y + framePad;
+      ctx.save();
+      roundedRect(px, py, photoW, photoH, 12);
+      ctx.clip();
+      ctx.drawImage(ims[i], px, py, photoW, photoH);
+      ctx.restore();
+
+      // tiny accent line on bottom
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(x+framePad, y+framePad*2+photoH+bottomExtra-26);
+      ctx.lineTo(x+framePad+220, y+framePad*2+photoH+bottomExtra-26);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.restore();
+    }
+
+    drawOuterBorder(w,h);
+    drawStamp(w,h, `Polaroid • ${n} fotos`);
+    return c.toDataURL('image/jpeg',0.95);
+  }
+
+  // Series
+  async function takeSeries(){
+    const n=parseInt(shotsRange.value,10);
+    const t=parseInt(timerRange.value,10);
+
+    setStatus(`Serie läuft: ${n} Fotos…`);
+    btnStart.disabled=true;
+
+    const shots=[];
+    for(let i=0;i<n;i++){
+      if(t>0) await countdown(t);
+      flash(); playShutter();
+      shots.push(captureFrame());
+      await sleep(250);
+    }
+
+    btnStart.disabled=false;
+    setStatus('Render…');
+
+    let out;
+    if(layoutSel.value==='strip') out = await buildStrip(shots);
+    else if(layoutSel.value==='polaroid') out = await buildPolaroid(shots);
+    else out = await buildGrid(shots);
+
+    lastOut=out;
+    preview.src=out;
+    setStatus('Fertig.');
+  }
+
+  btnStart.onclick=()=>takeSeries().catch(e=>{
+    console.error(e);
+    setStatus('Kamera nicht bereit / keine Berechtigung.');
+    btnStart.disabled=false;
+  });
+
+  // Init
+  startCam().then(()=>setStatus('Bereit.')).catch(err=>{
+    console.error(err);
+    setStatus('Kamera blockiert. Bitte Berechtigung erlauben.');
+  });
+
+})();
+</script>
+</body>
+</html>
